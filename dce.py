@@ -49,6 +49,7 @@ class Cluster:
         self._futures = []
         self._pending_jobs = Queue()
         self._node_queue = Queue()
+        self._id = -1
 
         # set up the nodes to use
         for address in node_list:
