@@ -65,8 +65,16 @@ class Node:
 def main(args):
     node = Node()
 
+    host = "localhost"
+    port = 17888
+
+    if len(args) > 1:
+        host = args[1]
+    if len(args) > 2:
+        port = int(args[2])
+
     print("Start daemon")
-    with Pyro4.Daemon(port=17888, host="localhost") as daemon:
+    with Pyro4.Daemon(port=port, host=host) as daemon:
         uri = daemon.register(node, "dce_node")
         print("Daemon started")
         daemon.requestLoop()
