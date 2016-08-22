@@ -3,12 +3,21 @@ import Pyro4
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from threading import Event
+import inspect
 
 
 def _serialize_function(func):
     code_string = marshal.dumps(func.__code__)
 
     return code_string
+
+
+def _get_module_name(mod):
+    return inspect.getmodule(mod).__name__
+
+
+def _get_module_source(mod):
+    return inspect.getsource(mod)
 
 
 # Abstraction for getting the result from a job
@@ -44,12 +53,13 @@ class JobDoneCallable:
 
 
 class Cluster:
-    def __init__(self, job, node_list):
+    def __init__(self, job, node_list, module_dependencies=()):
         self._nodes = []
         self._futures = []
         self._pending_jobs = Queue()
         self._node_queue = Queue()
         self._id = -1
+        self._module_d = module_dependencies
 
         # set up the nodes to use
         for address in node_list:
@@ -57,9 +67,10 @@ class Cluster:
 
         code_string = _serialize_function(job)
 
+        # send any module dependencies
+        self._send_modules()
+
         # send each node the entry point to use
-        # for node in self._nodes:
-        #     node.set_entry_point(code_string)
         self._setup(code_string)
 
         # add each node to the queue
@@ -74,6 +85,16 @@ class Cluster:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.dispatcher.shutdown(True)
+
+    def _send_modules(self):
+        with ThreadPoolExecutor() as pool:
+            # send the module dependency to each node
+            for mod in self._module_d:
+                name = _get_module_name(mod)
+                source = _get_module_source(mod)
+
+                for node in self._nodes:
+                    pool.submit(node.add_module, name, source)
 
     def _setup(self, func):
         with ThreadPoolExecutor() as pool:
