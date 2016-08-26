@@ -36,6 +36,14 @@ For example, suppose another module "test_module.py", was created as part of a p
 
 test_module would then be available to be used within the given "entry_point" as if it were globally imported. 
 
-## dce.node.py Usage
+## dce_node.py Usage
+dce_node.py is simply executed from the command-line, which starts an infinite process to wait for jobs from dce.py. dce_node.py can be given two parameters: the ip address and port to bind to. 
+
+For example:
+
+    python dce_node.py 192.168.1.24 15809
+
+## Shared Clusters
+All nodes which run dce_node.py can be shared by multiple programs running dce.py with the same set of nodes. Resources will be shared on the each node when executing multiple jobs at the same time, but everything else should function as expected. 
 
 The other files in the repository are test files which demonstrate the basic usage and capabilities of the modules. 
