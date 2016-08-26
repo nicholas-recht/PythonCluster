@@ -3,6 +3,8 @@ import types
 import Pyro4
 import sys
 import base64
+from concurrent.futures import ThreadPoolExecutor
+import multiprocessing
 
 
 def deserialize_function(code_string, context):
@@ -26,6 +28,8 @@ class Node:
     def __init__(self):
         self.entry_points = {}
         self.contexts = {}
+        self._num_processors = multiprocessing.cpu_count()
+        self.dispatcher = ThreadPoolExecutor()
 
     def _get_caller_address(self):
         address = Pyro4.current_context.client.sock.getpeername()[0] + ":" \
@@ -41,6 +45,9 @@ class Node:
         if address not in self.contexts:
             self.contexts[address] = {}
         self.contexts[address][name] = mod
+
+    def get_num_processors(self):
+        return self._num_processors
 
     def set_entry_point(self, params):
         address = self._get_caller_address()
@@ -60,6 +67,13 @@ class Node:
         address = self._get_caller_address()
 
         return self.entry_points[address](*args, **kwargs)
+
+    def execute_multi(self, args=(), kwargs=None):
+        if kwargs is None: kwargs = {}
+
+        address = self._get_caller_address()
+
+        return self.dispatcher.submit(self.entry_points[address], *args, **kwargs).result()
 
 
 def main(args):

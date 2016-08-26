@@ -53,17 +53,29 @@ class JobDoneCallable:
 
 
 class Cluster:
-    def __init__(self, job, node_list, module_dependencies=()):
+    def __init__(self, job, node_list, module_dependencies=(), multi=False):
         self._nodes = []
+        self._procs = []
         self._futures = []
         self._pending_jobs = Queue()
         self._node_queue = Queue()
         self._id = -1
         self._module_d = module_dependencies
+        self._multi = multi
 
         # set up the nodes to use
         for address in node_list:
             self._nodes.append(Pyro4.Proxy("PYRO:dce_node@" + address[0] + ":" + str(address[1])))
+            self._procs.append(0)
+
+        # set up multi-processing if set
+        if self._multi:
+            self._set_multi_processing()
+            # if multi threaded, then add more copies of each node for the number of threads available
+            for i in range(len(node_list)):
+                address = node_list[i]
+                for j in range(self._procs[i] - 1):
+                    self._nodes.append(Pyro4.Proxy("PYRO:dce_node@" + address[0] + ":" + str(address[1])))
 
         code_string = _serialize_function(job)
 
@@ -85,6 +97,16 @@ class Cluster:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.dispatcher.shutdown(True)
+
+    def _set_multi_processing(self):
+        results = []
+        with ThreadPoolExecutor() as pool:
+            # get the number of processors in each node
+            for node in self._nodes:
+                results.append(pool.submit(node.get_num_processors))
+
+            for i in range(len(results)):
+                self._procs[i] = results[i].result()
 
     def _send_modules(self):
         with ThreadPoolExecutor() as pool:
@@ -118,7 +140,10 @@ class Cluster:
             self._execute(pf, node, args, kwargs)
 
     def _execute(self, pending_future, node, args, kwargs):
-        fut = self.dispatcher.submit(node.execute, args=args, kwargs=kwargs)
+        if self._multi:
+            fut = self.dispatcher.submit(node.execute_multi, args=args, kwargs=kwargs)
+        else:
+            fut = self.dispatcher.submit(node.execute, args=args, kwargs=kwargs)
 
         # create the callback function to use
         cal = JobDoneCallable(node, self._add_node_to_queue)
