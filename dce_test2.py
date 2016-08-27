@@ -13,7 +13,7 @@ def func(i):
 
 def main(args):
     start_time = time.time()
-    with Cluster(job=func, node_list=(("localhost", 17888),), multi=False) as cluster:
+    with Cluster(job=func, node_list=(("localhost", 17888),), multi=True) as cluster:
 
         jobs = []
 
