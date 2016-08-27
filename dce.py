@@ -20,11 +20,13 @@ def _get_module_source(mod):
     return inspect.getsource(mod)
 
 
-# Abstraction for getting the result from a job
-#   either returns the future object's result method
-#   or blocks until a future has been added when the
-#   job is waiting for a node to become available
 class PendingFuture:
+    """
+    Abstraction for getting the result from a job
+    either returns the future object's result method
+    or blocks until a future has been added when the
+    job is waiting for a node to become available
+    """
     def __init__(self):
         self._future = None
         self._event = Event()
@@ -39,11 +41,13 @@ class PendingFuture:
         self._event.set()
 
 
-# Callable for when a node has finished it's current job
-#   stores the node which was used to execute the job
-#   so it can add that node back to the queue when finished then
-#   return control back to the Cluster
 class JobDoneCallable:
+    """
+    Callable for when a node has finished it's current job.
+    stores the node which was used to execute the job
+    so it can add that node back to the queue when finished then
+    return control back to the Cluster
+    """
     def __init__(self, node, callback):
         self.node = node
         self.callback = callback
@@ -53,7 +57,18 @@ class JobDoneCallable:
 
 
 class Cluster:
+    """
+    The main class used for distributing jobs among a list of nodes
+    """
     def __init__(self, job, node_list, module_dependencies=(), multi=False):
+        """
+        Creates a new cluster and sets up the cluster to schedule new instances of the given
+        job.
+        :param job:
+        :param node_list:
+        :param module_dependencies:
+        :param multi:
+        """
         self._nodes = []
         self._procs = []
         self._futures = []
@@ -149,6 +164,13 @@ class Cluster:
         pending_future.add_future(fut)
 
     def execute(self, args=(), kwargs=None):
+        """
+        Executes a new job using the given arguments and returns a callable object which
+        returns the result of the job when ready
+        :param args:
+        :param kwargs:
+        :return:
+        """
         if kwargs is None: kwargs = {}
 
         # create the callable

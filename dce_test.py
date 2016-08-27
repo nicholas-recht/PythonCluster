@@ -1,6 +1,7 @@
 from dce import Cluster
 import sys
 import time
+import list_generator
 
 
 def func(i):
@@ -13,8 +14,7 @@ def func(i):
 
 def main(args):
     start_time = time.time()
-    with Cluster(job=func, node_list=(("192.168.1.16", 15807), ("192.168.1.17", 15807),
-                                      ("192.168.1.18", 15807), ("192.168.1.19", 15807))) as cluster:
+    with Cluster(job=func, node_list=list_generator.from_range("192.168.1.16", "192.168.1.19", 15807)) as cluster:
 
         jobs = []
 

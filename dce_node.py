@@ -36,6 +36,12 @@ class Node:
         return address
 
     def add_module(self, name, source):
+        """
+        Add the module as a dependency for the caller
+        :param name:
+        :param source:
+        :return:
+        """
         address = self._get_caller_address()
 
         mod = create_new_module(name, source)
@@ -45,9 +51,18 @@ class Node:
         self.contexts[address][name] = mod
 
     def get_num_processors(self):
+        """
+        Returns the number of processors available to the node
+        :return:
+        """
         return self._num_processors
 
     def set_entry_point(self, params):
+        """
+        Sets the entry point function to use for the caller
+        :param params:
+        :return:
+        """
         address = self._get_caller_address()
 
         code_string = base64.b64decode(params["data"])
@@ -60,6 +75,13 @@ class Node:
         self.entry_points[address] = deserialize_function(code_string, context)
 
     def execute(self, args=(), kwargs=None):
+        """
+        Executes the given entry_point function for the caller using the given arguments
+        and returns the result
+        :param args:
+        :param kwargs:
+        :return:
+        """
         if kwargs is None: kwargs = {}
 
         address = self._get_caller_address()
@@ -68,6 +90,11 @@ class Node:
 
 
 def main(args):
+    """
+    Starts up a daemon process on the given address and port to listen for job requests
+    :param args:
+    :return:
+    """
     node = Node()
 
     host = "localhost"
