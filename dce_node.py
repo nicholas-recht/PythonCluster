@@ -28,6 +28,7 @@ class Node:
         self.entry_points = {}
         self.contexts = {}
         self._num_processors = multiprocessing.cpu_count()
+        self._pool = multiprocessing.Pool(processes=self._num_processors)
 
     def _get_caller_address(self):
         address = Pyro4.current_context.client.sock.getpeername()[0] + ":" \
@@ -87,6 +88,21 @@ class Node:
         address = self._get_caller_address()
 
         return self.entry_points[address](*args, **kwargs)
+
+    def execute_multi(self, args=(), kwargs=None):
+        """
+        Executes the given entry_point function for the caller using the given arguments
+        and returns the result. This method should be called when using multi-threaded
+        mode on the caller.
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        if kwargs is None: kwargs = {}
+
+        address = self._get_caller_address()
+
+        return self._pool.apply(self.entry_points[address], *args, **kwargs)
 
 
 def main(args):
