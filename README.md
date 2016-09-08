@@ -37,7 +37,9 @@ For example, suppose another module "test_module.py", was created as part of a p
 test_module would then be available to be used within the given "entry_point" as if it were globally imported. 
 
 ### Multi-threading
-The Cluster constructor contains an optional multi parameter (which by default is set to False) which can be used to execute multiple jobs per each node. By default, jobs will only be scheduled one at a time per node. With multi set to True, each node will be scheduled with as many jobs as available processors on the node. This can have a substantial performance increase when other jobs are not running on the nodes, and each job runs in a single thread. 
+The Cluster constructor contains an optional multi parameter (which by default is set to False) which can be used to execute multiple jobs per each node. By default, jobs will only be scheduled one at a time per node. With multi set to True, each node will be scheduled with as many jobs as available processors on the node. 
+
+The multi-threading is implemented using multiple Python threads. While this can provide a significant performance increase for jobs which involve some kind of wait/IO, CPU intensive jobs won't see any benefit because of [Python's Global Interpreter Lock](https://wiki.python.org/moin/GlobalInterpreterLock).
 
 ## dce_node.py Usage
 dce_node.py is simply executed from the command-line, which starts an infinite process to wait for jobs from dce.py. dce_node.py can be given two parameters: the ip address and port to bind to. 
