@@ -132,10 +132,23 @@ def main(args):
         port = int(args[2])
 
     print("Start daemon")
-    with Pyro4.Daemon(port=port, host=host) as daemon:
-        uri = daemon.register(node, "dce_node")
-        print("Daemon started")
-        daemon.requestLoop()
+
+    # NAT
+    if len(args) > 4:
+        nat_host = args[3]
+        nat_port = int(args[4])
+
+        with Pyro4.Daemon(natport=nat_port, nathost=nat_host, port=port, host=host) as daemon:
+            uri = daemon.register(node, "dce_node")
+            print("Daemon started")
+            daemon.requestLoop()
+
+    # no NAT
+    else:
+        with Pyro4.Daemon(port=port, host=host) as daemon:
+            uri = daemon.register(node, "dce_node")
+            print("Daemon started")
+            daemon.requestLoop()
 
 if __name__ == "__main__":
     main(sys.argv)
