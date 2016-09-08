@@ -56,6 +56,17 @@ class JobDoneCallable:
         self.callback(self.node)
 
 
+class Node:
+    """
+    Each node used for executing jobs. Stores the associated id value to use, the Pyro4
+    proxy object, and the number of processors available (if the node is the original)
+    """
+    def __init__(self, address, port):
+        self.daemon = Pyro4.Proxy("PYRO:dce_node@" + address + ":" + str(port))
+        self.id = -1
+        self.procs = 1
+
+
 class Cluster:
     """
     The main class used for distributing jobs among a list of nodes
@@ -70,7 +81,6 @@ class Cluster:
         :param multi:
         """
         self._nodes = []
-        self._procs = []
         self._futures = []
         self._pending_jobs = Queue()
         self._node_queue = Queue()
@@ -80,8 +90,18 @@ class Cluster:
 
         # set up the nodes to use
         for address in node_list:
-            self._nodes.append(Pyro4.Proxy("PYRO:dce_node@" + address[0] + ":" + str(address[1])))
-            self._procs.append(0)
+            node = Node(address[0], address[1])
+            self._nodes.append(node)
+
+        # get the id values to use for each
+        self._get_id_values()
+
+        # send any module dependencies
+        self._send_modules()
+
+        # send each node the entry point to use
+        code_string = _serialize_function(job)
+        self._setup(code_string)
 
         # set up multi-processing if set
         if self._multi:
@@ -89,16 +109,11 @@ class Cluster:
             # if multi threaded, then add more copies of each node for the number of threads available
             for i in range(len(node_list)):
                 address = node_list[i]
-                for j in range(self._procs[i] - 1):
-                    self._nodes.append(Pyro4.Proxy("PYRO:dce_node@" + address[0] + ":" + str(address[1])))
-
-        code_string = _serialize_function(job)
-
-        # send any module dependencies
-        self._send_modules()
-
-        # send each node the entry point to use
-        self._setup(code_string)
+                original_node = self._nodes[i]
+                for j in range(original_node.procs - 1):
+                    node = Node(address[0], address[1])
+                    node.id = original_node.id  # copy the id value from the copy node
+                    self._nodes.append(node)
 
         # add each node to the queue
         for node in self._nodes:
@@ -111,17 +126,27 @@ class Cluster:
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.dispatcher.shutdown(True)
+        self.exit()
+
+    def _get_id_values(self):
+        results = []
+        with ThreadPoolExecutor() as pool:
+            # get the id value of each node to use
+            for node in self._nodes:
+                results.append(pool.submit(node.daemon.new_id))
+
+            for i in range(len(results)):
+                self._nodes[i].id = results[i].result()
 
     def _set_multi_processing(self):
         results = []
         with ThreadPoolExecutor() as pool:
             # get the number of processors in each node
             for node in self._nodes:
-                results.append(pool.submit(node.get_num_processors))
+                results.append(pool.submit(node.daemon.get_num_processors))
 
             for i in range(len(results)):
-                self._procs[i] = results[i].result()
+                self._nodes[i].procs = results[i].result()
 
     def _send_modules(self):
         with ThreadPoolExecutor() as pool:
@@ -131,13 +156,13 @@ class Cluster:
                 source = _get_module_source(mod)
 
                 for node in self._nodes:
-                    pool.submit(node.add_module, name, source)
+                    pool.submit(node.daemon.add_module, node.id, name, source)
 
     def _setup(self, func):
         with ThreadPoolExecutor() as pool:
             # send the given entry point function to each node
             for node in self._nodes:
-                pool.submit(node.set_entry_point, func)
+                pool.submit(node.daemon.set_entry_point, node.id, func)
 
     def _add_node_to_queue(self, node):
         self._node_queue.put(node)
@@ -156,9 +181,9 @@ class Cluster:
 
     def _execute(self, pending_future, node, args, kwargs):
         if self._multi:
-            fut = self.dispatcher.submit(node.execute_multi, args=args, kwargs=kwargs)
+            fut = self.dispatcher.submit(node.daemon.execute_multi, node.id, args=args, kwargs=kwargs)
         else:
-            fut = self.dispatcher.submit(node.execute, args=args, kwargs=kwargs)
+            fut = self.dispatcher.submit(node.daemon.execute, node.id, args=args, kwargs=kwargs)
 
         # create the callback function to use
         cal = JobDoneCallable(node, self._add_node_to_queue)
@@ -189,5 +214,15 @@ class Cluster:
 
         # return the callable
         return pf
+
+    def exit(self):
+        """
+        Shuts down this Cluster instance and signals all connected nodes that this
+        entry point is no longer being used
+        :return:
+        """
+        for node in self._nodes:
+            self.dispatcher.submit(node.daemon.end_id, node.id)
+        self.dispatcher.shutdown(True)
 
 

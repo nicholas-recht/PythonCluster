@@ -4,6 +4,8 @@ import Pyro4
 import sys
 import base64
 import multiprocessing
+import concurrent.futures
+import queue
 
 
 def deserialize_function(code_string, context):
@@ -28,7 +30,9 @@ class Node:
         self.entry_points = {}
         self.contexts = {}
         self._num_processors = multiprocessing.cpu_count()
-        self._pool = multiprocessing.Pool(processes=self._num_processors)
+        self._pool = concurrent.futures.ThreadPoolExecutor()
+        self._i_id = 0
+        self._i_queue = queue.Queue()
 
     def _get_caller_address(self):
         address = Pyro4.current_context.client.sock.getpeername()[0] + ":" \
@@ -36,20 +40,34 @@ class Node:
 
         return address
 
-    def add_module(self, name, source):
+    def new_id(self):
+        """
+        Returns the id value which can be used to associate the given caller with its
+        entry point and module dependencies
+        :return:
+        """
+        if self._i_queue.empty():
+            num = self._i_id
+
+            self._i_id += 1
+
+            return num
+        else:
+            return self._i_queue.get()
+
+    def add_module(self, id, name, source):
         """
         Add the module as a dependency for the caller
+        :param id:
         :param name:
         :param source:
         :return:
         """
-        address = self._get_caller_address()
-
         mod = create_new_module(name, source)
 
-        if address not in self.contexts:
-            self.contexts[address] = {}
-        self.contexts[address][name] = mod
+        if id not in self.contexts:
+            self.contexts[id] = {}
+        self.contexts[id][name] = mod
 
     def get_num_processors(self):
         """
@@ -58,24 +76,23 @@ class Node:
         """
         return self._num_processors
 
-    def set_entry_point(self, params):
+    def set_entry_point(self, id, params):
         """
         Sets the entry point function to use for the caller
+        :param id:
         :param params:
         :return:
         """
-        address = self._get_caller_address()
-
         code_string = base64.b64decode(params["data"])
         # create the context for the entry point
         context = globals()
         # if any modules were added, then merge them into the context
-        if address in self.contexts:
-            context.update(self.contexts[address])
+        if id in self.contexts:
+            context.update(self.contexts[id])
 
-        self.entry_points[address] = deserialize_function(code_string, context)
+        self.entry_points[id] = deserialize_function(code_string, context)
 
-    def execute(self, args=(), kwargs=None):
+    def execute(self, id, args=(), kwargs=None):
         """
         Executes the given entry_point function for the caller using the given arguments
         and returns the result
@@ -85,11 +102,9 @@ class Node:
         """
         if kwargs is None: kwargs = {}
 
-        address = self._get_caller_address()
+        return self.entry_points[id](*args, **kwargs)
 
-        return self.entry_points[address](*args, **kwargs)
-
-    def execute_multi(self, args=(), kwargs=None):
+    def execute_multi(self, id, args=(), kwargs=None):
         """
         Executes the given entry_point function for the caller using the given arguments
         and returns the result. This method should be called when using multi-threaded
@@ -100,9 +115,19 @@ class Node:
         """
         if kwargs is None: kwargs = {}
 
-        address = self._get_caller_address()
+        return self._pool.submit(self.entry_points[id], *args, **kwargs).result()
 
-        return self._pool.apply(self.entry_points[address], *args, **kwargs)
+    def end_id(self, id):
+        """
+        Releases the entry point and any modules specified by the given caller using
+        its asigned id value
+        :param id:
+        :return:
+        """
+        self._i_queue.put(id)
+
+        self.entry_points.pop(id)
+        self.contexts.pop(id)
 
 
 def main(args):
