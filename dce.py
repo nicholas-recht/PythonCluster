@@ -180,10 +180,7 @@ class Cluster:
             self._execute(pf, node, args, kwargs)
 
     def _execute(self, pending_future, node, args, kwargs):
-        if self._multi:
-            fut = self.dispatcher.submit(node.daemon.execute_multi, node.id, args=args, kwargs=kwargs)
-        else:
-            fut = self.dispatcher.submit(node.daemon.execute, node.id, args=args, kwargs=kwargs)
+        fut = self.dispatcher.submit(node.daemon.execute, node.id, args=args, kwargs=kwargs)
 
         # create the callback function to use
         cal = JobDoneCallable(node, self._add_node_to_queue)

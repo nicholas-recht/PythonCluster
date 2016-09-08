@@ -4,7 +4,6 @@ import Pyro4
 import sys
 import base64
 import multiprocessing
-import concurrent.futures
 import queue
 
 
@@ -30,7 +29,6 @@ class Node:
         self.entry_points = {}
         self.contexts = {}
         self._num_processors = multiprocessing.cpu_count()
-        self._pool = concurrent.futures.ThreadPoolExecutor()
         self._i_id = 0
         self._i_queue = queue.Queue()
 
@@ -103,19 +101,6 @@ class Node:
         if kwargs is None: kwargs = {}
 
         return self.entry_points[id](*args, **kwargs)
-
-    def execute_multi(self, id, args=(), kwargs=None):
-        """
-        Executes the given entry_point function for the caller using the given arguments
-        and returns the result. This method should be called when using multi-threaded
-        mode on the caller.
-        :param args:
-        :param kwargs:
-        :return:
-        """
-        if kwargs is None: kwargs = {}
-
-        return self._pool.submit(self.entry_points[id], *args, **kwargs).result()
 
     def end_id(self, id):
         """
